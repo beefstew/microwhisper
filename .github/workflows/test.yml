@@ -23,10 +23,18 @@ jobs:
       with:
         xcode-version: '15.0'
     
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
     - name: Install dependencies
       run: |
-        # Install Whisper CLI using Homebrew (as recommended in the README)
-        brew install whisper
+        # Install ffmpeg (required for Whisper)
+        brew install ffmpeg
+        
+        # Install Whisper CLI using pip
+        python -m pip install -U openai-whisper
         
         # Install BlackHole for system audio tests
         brew install blackhole-2ch
