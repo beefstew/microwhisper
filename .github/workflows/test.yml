@@ -25,9 +25,8 @@ jobs:
     
     - name: Install dependencies
       run: |
-        # Install Whisper CLI
-        brew install ffmpeg
-        pip3 install -U openai-whisper
+        # Install Whisper CLI using Homebrew (as recommended in the README)
+        brew install whisper
         
         # Install BlackHole for system audio tests
         brew install blackhole-2ch
