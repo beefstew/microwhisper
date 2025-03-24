@@ -134,6 +134,7 @@ jobs:
         echo "Using device ID: $DEVICE_ID"
         
         # Run the tests with the extracted device ID and disable code signing
+        # Skip UI tests in CI environment as they require special setup
         set -o pipefail && xcodebuild clean test \
           -project microwhisper.xcodeproj \
           -scheme microwhisper \
@@ -142,6 +143,7 @@ jobs:
           CODE_SIGN_IDENTITY="-" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
+          -skip-testing:microwhisperUITests \
           -resultBundlePath TestResults.xcresult | xcbeautify || {
             echo "Tests failed or couldn't run, check the output for details"
             echo "Creating minimal test result for CI continuation"
