@@ -27,9 +27,24 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Cache Homebrew dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/Library/Caches/Homebrew
+          /usr/local/Homebrew
+        key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/test.yml') }}
+        restore-keys: |
+          ${{ runner.os }}-brew-
     
     - name: Install dependencies
       run: |
+        # Configure Homebrew to minimize build time
+        export HOMEBREW_NO_AUTO_UPDATE=1
+        export HOMEBREW_NO_INSTALL_CLEANUP=1
+        
         # Install ffmpeg (required for Whisper)
         brew install ffmpeg
         
