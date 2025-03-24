@@ -39,9 +39,27 @@ jobs:
         # Install BlackHole for system audio tests
         brew install blackhole-2ch
     
+    - name: Check Xcode project structure
+      run: |
+        # Display project structure for debugging
+        ls -la
+        ls -la microwhisper.xcodeproj || echo "Project directory not found"
+        
+    - name: Validate Xcode project
+      run: |
+        # Check if project file exists and is valid
+        if [ -f "microwhisper.xcodeproj/project.pbxproj" ]; then
+          echo "Project file exists, checking format..."
+          plutil -lint microwhisper.xcodeproj/project.pbxproj
+        else
+          echo "Project file not found!"
+          exit 1
+        fi
+        
     - name: Build and Test
       run: |
-        xcodebuild clean test -project microwhisper.xcodeproj -scheme microwhisper -destination 'platform=macOS' -resultBundlePath TestResults.xcresult | xcpretty
+        # Run tests with detailed output if there are issues
+        set -o pipefail && xcodebuild clean test -project microwhisper.xcodeproj -scheme microwhisper -destination 'platform=macOS' -resultBundlePath TestResults.xcresult | xcpretty
       
     - name: Upload test results
       uses: actions/upload-artifact@v4
