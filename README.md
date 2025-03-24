@@ -1,5 +1,7 @@
 # MicroWhisper
 
+[![MicroWhisper Tests](https://github.com/ChrisGatzo/microwhisper/actions/workflows/test.yml/badge.svg)](https://github.com/ChrisGatzo/microwhisper/actions/workflows/test.yml)
+
 A macOS application that provides real-time audio transcription using OpenAI's Whisper model. The app sits in your menu bar and can be triggered with a global keyboard shortcut to start/stop recording. It supports both microphone and system audio recording.
 
 ## Features
