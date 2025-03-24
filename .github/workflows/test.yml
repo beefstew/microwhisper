@@ -124,11 +124,20 @@ jobs:
         # Install xcbeautify for better output formatting
         brew install xcbeautify
         
-        # Run the tests
+        # Show available destinations and extract the first device ID
+        echo "Available destinations:"
+        DESTINATIONS=$(xcodebuild -project microwhisper.xcodeproj -scheme microwhisper -showdestinations)
+        echo "$DESTINATIONS"
+        
+        # Extract the first device ID using grep and sed
+        DEVICE_ID=$(echo "$DESTINATIONS" | grep -o "id:[a-zA-Z0-9-]*" | head -1 | sed 's/id://')
+        echo "Using device ID: $DEVICE_ID"
+        
+        # Run the tests with the extracted device ID
         set -o pipefail && xcodebuild clean test \
           -project microwhisper.xcodeproj \
           -scheme microwhisper \
-          -destination 'platform=macOS,name=Any Mac' \
+          -destination "platform=macOS,arch=arm64,id=$DEVICE_ID" \
           -allowProvisioningUpdates \
           -resultBundlePath TestResults.xcresult | xcbeautify || {
             echo "Tests failed or couldn't run, check the output for details"
