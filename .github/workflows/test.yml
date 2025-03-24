@@ -128,7 +128,7 @@ jobs:
         set -o pipefail && xcodebuild clean test \
           -project microwhisper.xcodeproj \
           -scheme microwhisper \
-          -destination 'platform=macOS,arch=arm64,variant=macOS 14.7' \
+          -destination 'platform=macOS,name=Any Mac' \
           -allowProvisioningUpdates \
           -resultBundlePath TestResults.xcresult | xcbeautify || {
             echo "Tests failed or couldn't run, check the output for details"
