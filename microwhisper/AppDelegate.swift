@@ -121,17 +121,20 @@ extension AppDelegate: AudioRecorderDelegate {
         statusBarManager.updateRecordingState(isRecording: true)
         DispatchQueue.main.async {
             self.viewModel.clearTranscriptIfNeeded()
-            self.viewModel.appendTranscript("Recording started...")
             self.viewModel.isRecording = true
         }
     }
-    
+
     func audioRecorderDidStopRecording(fileURL: URL) {
         statusBarManager.updateRecordingState(isRecording: false)
         DispatchQueue.main.async {
-            self.viewModel.appendTranscript("\nRecording stopped. Transcribing...")
             self.viewModel.isRecording = false
         }
+        transcriptionManager.transcribeAudio(at: fileURL)
+    }
+
+    func audioRecorderDidCompleteChunk(fileURL: URL) {
+        print("Chunk ready for transcription: \(fileURL.lastPathComponent)")
         transcriptionManager.transcribeAudio(at: fileURL)
     }
     
@@ -151,19 +154,11 @@ extension AppDelegate: AudioRecorderDelegate {
 // MARK: - TranscriptionManagerDelegate
 extension AppDelegate: TranscriptionManagerDelegate {
     func transcriptionManager(_ manager: TranscriptionManager, didUpdateProgress progress: String) {
-        let lines = viewModel.transcript.components(separatedBy: "\n")
-        if var lastLine = lines.last, lastLine.contains("transcription") {
-            var newTranscript = lines.dropLast().joined(separator: "\n")
-            if !newTranscript.isEmpty {
-                newTranscript += "\n"
-            }
-            newTranscript += progress
-            viewModel.transcript = newTranscript
-        }
+        // Progress ticks are not shown in the transcript.
     }
     
     func transcriptionManager(_ manager: TranscriptionManager, didCompleteWithTranscription transcription: String) {
-        viewModel.appendTranscript("\nTranscription complete:\n\(transcription)")
+        viewModel.appendTranscript("\n\(transcription)")
     }
     
     func transcriptionManager(_ manager: TranscriptionManager, didFailWithError error: Error) {

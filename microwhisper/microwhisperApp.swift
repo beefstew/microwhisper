@@ -15,7 +15,7 @@ struct MicrowhisperApp: App {
         NSWindow.allowsAutomaticWindowTabbing = false
         DispatchQueue.main.async {
             NSApplication.shared.windows.forEach { window in
-                window.titlebarAppearsTransparent = true
+                window.titlebarAppearsTransparent = false
                 window.titleVisibility = .hidden
                 window.backgroundColor = .clear
             }

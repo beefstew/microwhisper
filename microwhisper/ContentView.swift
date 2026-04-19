@@ -81,7 +81,7 @@ struct ContentView: View {
                         }
                         
                         // Transcript area with flexible sizing
-                        if viewModel.showTranscript {
+                        if viewModel.isRecording || viewModel.showTranscript {
                             VStack(alignment: .trailing, spacing: 8) {
                                 HStack {
                                     Spacer()
@@ -99,18 +99,12 @@ struct ContentView: View {
                                     .help("Copy transcript to clipboard")
                                 }
                                 .padding(.trailing, 10)
-                                
-                                ScrollView {
-                                    Text(viewModel.transcript)
-                                        .font(.system(size: 14))
-                                        .padding()
-                                        .textSelection(.enabled)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(minHeight: 100, maxHeight: .infinity)
-                                .background(Color(NSColor.textBackgroundColor).opacity(0.2))
-                                .cornerRadius(12)
+
+                                AutoScrollTextView(text: viewModel.transcript)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(minHeight: 100, maxHeight: .infinity)
+                                    .background(Color(NSColor.textBackgroundColor).opacity(0.2))
+                                    .cornerRadius(12)
                             }
                             .padding(.horizontal, 30)
                             .frame(minHeight: 200, maxHeight: viewModel.isRecording ? 200 : .infinity)
@@ -245,6 +239,67 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 400)
+    }
+}
+
+// MARK: - Auto-scrolling transcript view
+
+struct AutoScrollTextView: NSViewRepresentable {
+    let text: String
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+
+        let textView = NSTextView()
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.font = NSFont.systemFont(ofSize: 14)
+        textView.textColor = NSColor.labelColor
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+
+        scrollView.documentView = textView
+
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.didLiveScroll(_:)),
+            name: NSScrollView.didLiveScrollNotification,
+            object: scrollView)
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView,
+              textView.string != text else { return }
+
+        textView.string = text
+
+        if context.coordinator.shouldAutoScroll {
+            DispatchQueue.main.async {
+                textView.scrollRangeToVisible(NSRange(location: (text as NSString).length, length: 0))
+            }
+        }
+    }
+
+    class Coordinator: NSObject {
+        var shouldAutoScroll = true
+
+        @objc func didLiveScroll(_ notification: Notification) {
+            guard let scrollView = notification.object as? NSScrollView,
+                  let documentView = scrollView.documentView else { return }
+            let distanceFromBottom = documentView.frame.maxY - scrollView.documentVisibleRect.maxY
+            shouldAutoScroll = distanceFromBottom < 30
+        }
     }
 }
 
