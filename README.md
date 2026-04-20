@@ -1,67 +1,51 @@
 # MicroWhisper
 
-[![MicroWhisper Tests](https://github.com/ChrisGatzo/microwhisper/actions/workflows/test.yml/badge.svg)](https://github.com/ChrisGatzo/microwhisper/actions/workflows/test.yml)
-
-A macOS application that provides real-time audio transcription using OpenAI's Whisper model. The app sits in your menu bar and can be triggered with a global keyboard shortcut to start/stop recording. It supports both microphone and system audio recording.
+A macOS application that provides near real-time audio transcription using OpenAI's Whisper model. The app sits in your menu bar and can be triggered with a global keyboard shortcut to start/stop recording. It supports recording off any of your audio devices.
 
 ## Features
 
-- Real-time audio recording with visual feedback
-- Record from microphone or system audio (using BlackHole)
-- Global keyboard shortcut (⌥⇧R) to start/stop recording
-- Visual audio level indicator while recording
-- Instant transcription using Whisper's tiny.en model
-- Selectable transcript text
+- Audio recording with visual transcription feedback
+- Record your microphone and system audio (using BlackHole)
+- Visual audio levels indicator with channel-level detail
+- Copy transcribed text
+- Transcripts saved to desktop in plain text file
 - Clean, minimal SwiftUI interface
+- Global keyboard shortcut (⌥⇧R) to start/stop recording (BROKEN)
 
 ## Requirements
 
 - macOS 15.2 or later
-- Whisper CLI installed (`/usr/local/bin/whisper`)
+- [Whisper.cpp](https://github.com/ggml-org/whisper.cpp) CLI installed (`/usr/local/bin/whisper`)
 - Microphone access permission
-- BlackHole audio driver (optional, for system audio recording)
+- BlackHole audio driver (optional, for microphone + system audio recording)
 
 ## Installation
 
 1. Clone this repository
 2. Open the project in Xcode
-3. Install Whisper CLI if you haven't already:
-   ```bash
-   # Install Whisper CLI (if using Homebrew)
-   brew install whisper
-   ```
-4. (Optional) Install BlackHole for system audio recording:
-   ```bash
-   # Install BlackHole (if using Homebrew)
-   brew install blackhole-2ch
-   ```
+3. Install [Whisper.cpp](https://github.com/ggml-org/whisper.cpp/releases) CLI
+4. (Optional) Install [BlackHole](https://github.com/existentialaudio/blackhole) for recording from microphone and system audio at the same time. After installing, use `Audio MIDI Setup.app` (Applications > Utilities) to:
+	1. Click the "+" button in the bottom left and add an Aggregate audio device with your Microphone device and BlackHole 2ch
+	2. Click the "+" button in the bottom left and add a Multi-Output device with your Speaker device and BlackHole 2ch
 5. Build and run the project in Xcode
 
 ## Usage
 
 1. Launch the application
-2. Select your audio source (microphone or system audio)
-3. Press ⌥⇧R (Option + Shift + R) to start recording
-4. Speak into your microphone or play audio from your system
-5. Press ⌥⇧R again to stop recording and start transcription
-6. The transcribed text will appear in the window
-7. You can select and copy the transcribed text
+2. Select the audio device from which you want to transcribe audio. If you want to record from your microphone *and* system audio, use the **System Settings > Sound** to set Output to the Multi-Output device you created earlier and Input to the Aggregate device
+3. Start recording
+4. Speak into your microphone and/or play audio on the selected device (e.g. MacBook Pro Speakers)
+5. Transcription will update in the text area approximately every 10 seconds
+7. You can copy the transcribed text at any time
+8. When you stop recording, a text file of the session transcript will appear on your desktop
 
-### Setting Up System Audio Recording
-
-1. Install BlackHole audio driver (see Installation section)
-2. Open System Settings > Sound
-3. Set the output device to "BlackHole 2ch"
-4. Open the application you want to record audio from (e.g., Zoom, YouTube)
-5. In MicroWhisper, select "System Audio" as your audio source
-6. Start recording
-
-Note: To hear the audio while recording, you'll need to set up a Multi-Output Device in Audio MIDI Setup:
-
-1. Open Audio MIDI Setup (Applications > Utilities)
-2. Click the "+" button in the bottom left and select "Create Multi-Output Device"
-3. Check both your regular output device (e.g., Built-in Output) and "BlackHole 2ch"
-4. In System Settings > Sound, set the output to your newly created Multi-Output Device
+## Future Enhancement Ideas
+- Streamlined Whisper installation
+- Pre-built, signed releases
+- Historical transcripts managed in app (like Voice Memos)
+- Speaker tracking / identification
+- Keep compressed audio recordings (.m4a)
+- Improved application test suite
 
 ## Technical Details
 

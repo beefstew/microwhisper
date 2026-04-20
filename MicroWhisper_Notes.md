@@ -24,11 +24,11 @@ MicroWhisper is a macOS menu bar application that provides real-time audio trans
 ### Audio Recording
 - Uses AVFoundation's `AVAudioRecorder` to capture audio
 - Implements audio level metering for visualization
-- Saves temporary audio files as AAC (.m4a) format
+- Saves temporary audio files as WAV (.wav) format
 
 ### Transcription
 - Relies on locally installed OpenAI Whisper CLI (`/usr/local/bin/whisper`)
-- Uses the "base.en" model for English transcription
+- Uses the "ggml-large-v2.en" model for English transcription (line ~124 `TranscriptionManager.swift`)
 - Processes audio in a background thread
 - Manages process lifecycle with proper cleanup
 
@@ -48,11 +48,3 @@ MicroWhisper is a macOS menu bar application that provides real-time audio trans
 - Whisper CLI installed at `/usr/local/bin/whisper`
 - AVFoundation for audio recording
 - SwiftUI for UI components
-
-## Potential Enhancement Areas
-- Additional Whisper model options
-- Transcript export options
-- Customizable keyboard shortcuts
-- UI theme customization
-- Recording history
-- Transcript editing capabilities
