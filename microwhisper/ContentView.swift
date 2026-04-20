@@ -79,9 +79,12 @@ struct ContentView: View {
                                 AutoScrollTextView(text: viewModel.transcript)
                                     .frame(maxWidth: .infinity)
                                     .frame(minHeight: 200, maxHeight: .infinity)
-//                                    .background(Color(NSColor.textBackgroundColor).opacity(0.4))
-                                    .background(Color("aqua").opacity(0.5))
+                                    .background(Color(NSColor.textBackgroundColor))
                                     .cornerRadius(12)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                                    )
                             }
                             .padding(.horizontal, 30)
                             .frame(minHeight: 200, maxHeight: .infinity)
@@ -93,6 +96,7 @@ struct ContentView: View {
                         
                     }
                 }
+                .background(Color.clear)
             }
         }
         .frame(minWidth: 500, minHeight: 400)
