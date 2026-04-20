@@ -12,7 +12,6 @@ class TranscriptionViewModel: ObservableObject {
     @Published var transcript: String = ""
     @Published var isRecording: Bool = false
     @Published var audioLevels: [Float] = []
-    @Published var showTranscript: Bool = false
     
     @Published var isMicrophoneAvailable: Bool = true
     @Published var availableInputDevices: [AudioRecorderManager.AudioDevice] = []
@@ -40,13 +39,11 @@ class TranscriptionViewModel: ObservableObject {
         } else {
             transcript += "\n\(text)"
         }
-        showTranscript = !transcript.isEmpty
     }
     
     func clearTranscriptIfNeeded() {
         // Clear transcript when starting a new recording session
         transcript = ""
-        showTranscript = false
     }
     
     func copyTranscriptToPasteboard() {

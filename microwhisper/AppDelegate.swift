@@ -9,7 +9,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private(set) var isMicrophoneAvailable = true
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard audioManager.isRecording || transcriptionManager.pendingTaskCount > 0 else {
+            return .terminateNow
+        }
+        let alert = NSAlert()
+        alert.messageText = "Transcription still processing. Quit anyway?"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.applicationIconImage = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
         setupDelegates()
 
         // Detect audio devices

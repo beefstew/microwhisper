@@ -10,6 +10,10 @@ class TranscriptionManager {
     weak var delegate: TranscriptionManagerDelegate?
     private var progressTimer: Timer?
 
+    /// Number of transcription tasks currently queued or running.
+    /// Only read/written on the main thread.
+    private(set) var pendingTaskCount: Int = 0
+
     // Serial queue — chunks are transcribed one at a time in arrival order,
     // preventing multiple simultaneous whisper processes from thrashing the CPU.
     private let transcriptionQueue = DispatchQueue(label: "com.microwhisper.transcription",
@@ -34,8 +38,10 @@ class TranscriptionManager {
     /// Because transcriptionQueue is serial, the save task runs after every
     /// in-flight chunk transcription completes.
     func endSession() {
+        DispatchQueue.main.async { [weak self] in self?.pendingTaskCount += 1 }
         transcriptionQueue.async { [weak self] in
             self?.saveSessionTranscript()
+            DispatchQueue.main.async { self?.pendingTaskCount -= 1 }
         }
     }
 
@@ -62,7 +68,9 @@ class TranscriptionManager {
     }
 
     func transcribeAudio(at fileURL: URL) {
+        DispatchQueue.main.async { [weak self] in self?.pendingTaskCount += 1 }
         transcriptionQueue.async { [weak self] in
+            defer { DispatchQueue.main.async { self?.pendingTaskCount -= 1 } }
             guard let self = self else { return }
 
             let process = Process()
