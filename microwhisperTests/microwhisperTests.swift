@@ -15,68 +15,20 @@ import CoreAudio
 
 struct AudioRecorderManagerTests {
     
-    // MARK: - Audio Source Tests
-    
-    @Test func testAudioSourceSelection() async throws {
-        let manager = MockAudioRecorderManager()
-        let delegate = MockAudioRecorderDelegate()
-        manager.delegate = delegate
-        
-        // Test microphone source selection
-        manager.startRecording(from: .microphone)
-        #expect(manager.currentAudioSource == .microphone)
-        
-        // Test system audio source selection
-        manager.mockBlackholeAvailable = true
-        manager.startRecording(from: .systemAudio)
-        #expect(manager.currentAudioSource == .systemAudio)
-    }
-    
-    @Test func testBlackholeUnavailableError() async throws {
-        let manager = MockAudioRecorderManager()
-        let delegate = MockAudioRecorderDelegate()
-        manager.delegate = delegate
-        
-        // Set BlackHole as unavailable
-        manager.mockBlackholeAvailable = false
-        
-        // Attempt to record from system audio should call the error delegate method
-        manager.startRecording(from: .systemAudio)
-        
-        // Error should be passed to the delegate
-        #expect(delegate.didFailWithErrorCalled == true)
-        if let error = delegate.lastError as? NSError {
-            #expect(error.domain == "AudioRecorderManager")
-            #expect(error.code == 1001)
-        } else {
-            XCTFail("Expected NSError but got nil or different type")
-        }
-    }
-    
+    // MARK: - Device Detection Tests
+
     @Test func testDeviceDetection() async throws {
         let manager = MockAudioRecorderManager()
         let delegate = MockAudioRecorderDelegate()
         manager.delegate = delegate
-        
-        // Test with BlackHole unavailable
-        manager.mockBlackholeAvailable = false
+
         manager.detectAudioDevices()
-        
+
         // Wait for async delegate call
         try await Task.sleep(for: .milliseconds(100))
-        
+
         #expect(delegate.microphoneAvailable == true)
-        #expect(delegate.blackholeAvailable == false)
-        
-        // Test with BlackHole available
-        manager.mockBlackholeAvailable = true
-        manager.detectAudioDevices()
-        
-        // Wait for async delegate call
-        try await Task.sleep(for: .milliseconds(100))
-        
-        #expect(delegate.microphoneAvailable == true)
-        #expect(delegate.blackholeAvailable == true)
+        #expect(delegate.didDetectDevicesCalled == true)
     }
     
     // MARK: - Recording State Tests
@@ -85,29 +37,31 @@ struct AudioRecorderManagerTests {
         let manager = MockAudioRecorderManager()
         let delegate = MockAudioRecorderDelegate()
         manager.delegate = delegate
-        
+
+        let device = AudioRecorderManager.AudioDevice(id: 0, name: "Mock Mic")
+
         // Test starting recording
-        manager.startRecording(from: .microphone)
+        manager.startRecording(device: device)
         #expect(manager.isRecording == true)
         #expect(delegate.didStartRecordingCalled == true)
-        
+
         // Test stopping recording
         manager.stopRecording()
         #expect(manager.isRecording == false)
         #expect(delegate.didStopRecordingCalled == true)
     }
-    
+
     @Test func testAudioLevelUpdates() async throws {
         let manager = MockAudioRecorderManager()
         let delegate = MockAudioRecorderDelegate()
         manager.delegate = delegate
-        
-        // Start recording to trigger meter updates
-        manager.startRecording(from: .microphone)
-        
+
+        let device = AudioRecorderManager.AudioDevice(id: 0, name: "Mock Mic")
+        manager.startRecording(device: device)
+
         // Simulate meter updates
         manager.simulateMeterUpdate(level: 0.5)
-        
+
         #expect(delegate.lastAudioLevel == 0.5)
     }
 }
@@ -201,80 +155,33 @@ struct TranscriptionManagerTests {
 
 // Mock AudioRecorderManager for testing
 class MockAudioRecorderManager: AudioRecorderManager, @unchecked Sendable {
-    // Use a thread-safe property for Swift 6 Sendable conformance
-    private let mockBlackholeAvailableLock = NSLock()
-    private var _mockBlackholeAvailable: Bool = false
-    var mockBlackholeAvailable: Bool {
-        get {
-            mockBlackholeAvailableLock.lock()
-            defer { mockBlackholeAvailableLock.unlock() }
-            return _mockBlackholeAvailable
-        }
-        set {
-            mockBlackholeAvailableLock.lock()
-            _mockBlackholeAvailable = newValue
-            mockBlackholeAvailableLock.unlock()
-        }
-    }
-    private var mockMeterTimer: Timer?
-    
-    // Mock properties that mirror the private(set) properties in the parent class
     private var mockIsRecording = false
-    private var mockCurrentAudioSource: AudioSource = .microphone
-    
+
     override func detectAudioDevices() {
-        // Don't directly access the property, use the delegate instead
-        updateDeviceAvailability(microphoneAvailable: true, blackholeAvailable: mockBlackholeAvailable)
-    }
-    
-    override func startRecording(from source: AudioSource = .microphone) {
-        if source == .systemAudio && !mockBlackholeAvailable {
-            let error = NSError(domain: "AudioRecorderManager", 
-                                code: 1001, 
-                                userInfo: [NSLocalizedDescriptionKey: "BlackHole audio device not available"])
-            delegate?.audioRecorderDidFailWithError(error)
-            return
+        DispatchQueue.main.async {
+            self.delegate?.audioRecorderDidDetectDevices(
+                devices: self.inputDevices,
+                microphoneAvailable: true)
         }
-        
-        // Set our mock properties
+    }
+
+    override func startRecording(device: AudioDevice) {
         mockIsRecording = true
-        mockCurrentAudioSource = source
-        
-        // Notify delegate of state changes
         delegate?.audioRecorderDidStartRecording()
     }
-    
+
     override func stopRecording() {
-        // Set our mock property
         mockIsRecording = false
-        
-        mockMeterTimer?.invalidate()
-        mockMeterTimer = nil
-        
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("mock_recording.m4a")
         delegate?.audioRecorderDidStopRecording(fileURL: tempURL)
     }
-    
+
     func simulateMeterUpdate(level: Float) {
-        delegate?.audioRecorderDidUpdateLevel(level)
+        delegate?.audioRecorderDidUpdateLevel([level])
     }
-    
-    func updateDeviceAvailability(microphoneAvailable: Bool, blackholeAvailable: Bool) {
-        DispatchQueue.main.async {
-            self.delegate?.audioRecorderDidDetectDevices(
-                microphoneAvailable: microphoneAvailable,
-                blackholeAvailable: blackholeAvailable
-            )
-        }
-    }
-    
-    // Override the parent class's properties to return our mock values
+
     override var isRecording: Bool {
         return mockIsRecording
-    }
-    
-    override var currentAudioSource: AudioSource {
-        return mockCurrentAudioSource
     }
 }
 
@@ -285,36 +192,36 @@ class MockAudioRecorderDelegate: AudioRecorderDelegate {
     var didUpdateLevelCalled = false
     var didFailWithErrorCalled = false
     var didDetectDevicesCalled = false
-    
+
     var lastAudioLevel: Float = 0.0
     var lastError: Error?
     var lastFileURL: URL?
     var microphoneAvailable = false
-    var blackholeAvailable = false
-    
+
     func audioRecorderDidStartRecording() {
         didStartRecordingCalled = true
     }
-    
+
     func audioRecorderDidStopRecording(fileURL: URL) {
         didStopRecordingCalled = true
         lastFileURL = fileURL
     }
-    
-    func audioRecorderDidUpdateLevel(_ level: Float) {
+
+    func audioRecorderDidCompleteChunk(fileURL: URL) {}
+
+    func audioRecorderDidUpdateLevel(_ levels: [Float]) {
         didUpdateLevelCalled = true
-        lastAudioLevel = level
+        lastAudioLevel = levels.first ?? 0.0
     }
-    
+
     func audioRecorderDidFailWithError(_ error: Error) {
         didFailWithErrorCalled = true
         lastError = error
     }
-    
-    func audioRecorderDidDetectDevices(microphoneAvailable: Bool, blackholeAvailable: Bool) {
+
+    func audioRecorderDidDetectDevices(devices: [AudioRecorderManager.AudioDevice], microphoneAvailable: Bool) {
         didDetectDevicesCalled = true
         self.microphoneAvailable = microphoneAvailable
-        self.blackholeAvailable = blackholeAvailable
     }
 }
 

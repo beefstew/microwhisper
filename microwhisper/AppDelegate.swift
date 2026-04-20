@@ -7,16 +7,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let statusBarManager = StatusBarManager()
     private let transcriptionManager = TranscriptionManager()
     
-    // Track available audio sources
     private(set) var isMicrophoneAvailable = true
-    private(set) var isBlackholeAvailable = false
-    
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupDelegates()
-        
-        // Initialize UI state
-        updateSelectedAudioSource(.microphone)
-        
+
         // Detect audio devices
         audioManager.detectAudioDevices()
         
@@ -32,89 +27,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         transcriptionManager.delegate = self
     }
     
-    // Method to handle audio source selection
-    func updateSelectedAudioSource(_ source: AudioRecorderManager.AudioSource) {
-        // Ensure the AudioRecorderManager knows about the change
-        audioManager.detectAudioDevices()
-        
-        // Update the status bar menu to reflect the change
-        switch source {
-        case .microphone:
-            statusBarManager.updateSourceMenuState(selectedSource: "Microphone")
-            print("UI updated for microphone source selection")
-        case .systemAudio:
-            statusBarManager.updateSourceMenuState(selectedSource: "System Audio (BlackHole)")
-            print("UI updated for system audio source selection")
-        default:
-            break
-        }
-        
-        // Force the view model to update its UI
-        DispatchQueue.main.async {
-            // This will trigger SwiftUI to refresh the view
-            self.viewModel.objectWillChange.send()
-        }
-    }
 }
 
 // MARK: - StatusBarManagerDelegate
 extension AppDelegate: StatusBarManagerDelegate {
-    func statusBarManagerDidRequestStartRecording() {
-        startRecording(from: viewModel.selectedAudioSource)
+    func statusBarManagerDidToggleRecording() {
+        toggleRecording()
     }
-    
-    func statusBarManagerDidRequestStopRecording() {
-        audioManager.stopRecording()
-    }
-    
-    func statusBarManagerDidRequestStartRecordingFromMicrophone() {
-        viewModel.selectedAudioSource = .microphone
-        startRecording(from: .microphone)
-    }
-    
-    func statusBarManagerDidRequestStartRecordingFromSystemAudio() {
-        viewModel.selectedAudioSource = .systemAudio
-        startRecording(from: .systemAudio)
-    }
-    
-    func statusBarManagerDidSelectAudioSource(_ source: AudioRecorderManager.AudioSource) {
-        viewModel.selectedAudioSource = source
-    }
-    
-    private func startRecording(from source: AudioRecorderManager.AudioSource) {
-        // Check if selected source is available
-        if source == .systemAudio && !isBlackholeAvailable {
-            DispatchQueue.main.async {
-                self.viewModel.appendTranscript("Error: BlackHole audio device not available. Please install BlackHole and restart the app.")
-            }
-            return
-        }
-        
-        audioManager.startRecording(from: source)
-    }
+
 }
 
 // MARK: - AudioRecorderDelegate
 extension AppDelegate: AudioRecorderDelegate {    
-    func audioRecorderDidDetectDevices(microphoneAvailable: Bool, blackholeAvailable: Bool) {
+    func audioRecorderDidDetectDevices(devices: [AudioRecorderManager.AudioDevice], microphoneAvailable: Bool) {
         isMicrophoneAvailable = microphoneAvailable
-        isBlackholeAvailable = blackholeAvailable
-        
-        // Update the view model
+
         DispatchQueue.main.async {
-            self.viewModel.isBlackholeAvailable = blackholeAvailable
+            self.viewModel.availableInputDevices = devices
             self.viewModel.isMicrophoneAvailable = microphoneAvailable
-            
-            // If the currently selected source is not available, switch to an available one
-            if self.viewModel.selectedAudioSource == .systemAudio && !blackholeAvailable {
-                self.viewModel.selectedAudioSource = .microphone
+
+            // Auto-select the system default input device on first run, or recover if the
+            // previously selected device has disappeared (e.g. unplugged).
+            if self.viewModel.selectedDevice == nil || !devices.contains(self.viewModel.selectedDevice!) {
+                self.viewModel.selectedDevice = devices.first(where: { $0.id == self.audioManager.defaultInputDeviceID }) ?? devices.first
             }
-            
-            // Update status bar menu
-            self.statusBarManager.updateAudioSourceAvailability(
-                microphoneAvailable: microphoneAvailable,
-                blackholeAvailable: blackholeAvailable
-            )
         }
     }
     func audioRecorderDidStartRecording() {
@@ -138,9 +74,9 @@ extension AppDelegate: AudioRecorderDelegate {
         transcriptionManager.transcribeAudio(at: fileURL)
     }
     
-    func audioRecorderDidUpdateLevel(_ level: Float) {
+    func audioRecorderDidUpdateLevel(_ levels: [Float]) {
         DispatchQueue.main.async {
-            self.viewModel.audioLevel = level
+            self.viewModel.audioLevels = levels
         }
     }
     
@@ -171,12 +107,16 @@ extension AppDelegate {
     func toggleRecording() {
         if audioManager.isRecording {
             audioManager.stopRecording()
-        } else {
-            startRecording(from: viewModel.selectedAudioSource)
+        } else if let device = viewModel.selectedDevice {
+            audioManager.startRecording(device: device)
         }
     }
-    
-    func setAudioSource(_ source: AudioRecorderManager.AudioSource) {
-        viewModel.selectedAudioSource = source
+
+    func selectedDeviceChanged(to device: AudioRecorderManager.AudioDevice?) {
+        guard let device else {
+            audioManager.stopMonitoring()
+            return
+        }
+        audioManager.startMonitoring(deviceID: device.id)
     }
 }

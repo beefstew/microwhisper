@@ -11,26 +11,20 @@ import Combine
 class TranscriptionViewModel: ObservableObject {
     @Published var transcript: String = ""
     @Published var isRecording: Bool = false
-    @Published var audioLevel: Float = 0
+    @Published var audioLevels: [Float] = []
     @Published var showTranscript: Bool = false
     
-    // Audio source properties
-    @Published var selectedAudioSource: AudioRecorderManager.AudioSource = .microphone {
+    @Published var isMicrophoneAvailable: Bool = true
+    @Published var availableInputDevices: [AudioRecorderManager.AudioDevice] = []
+    @Published var selectedDevice: AudioRecorderManager.AudioDevice? = nil {
         didSet {
-            // Notify AppDelegate of the change
-            appDelegate?.updateSelectedAudioSource(selectedAudioSource)
+            appDelegate?.selectedDeviceChanged(to: selectedDevice)
         }
     }
-    @Published var isBlackholeAvailable: Bool = false
-    @Published var isMicrophoneAvailable: Bool = true
     
     weak var appDelegate: AppDelegate?
     
-    // Initialize with default values
-    init() {
-        // Default to microphone as the selected audio source
-        selectedAudioSource = .microphone
-    }
+    init() {}
     
     func toggleRecording() {
         appDelegate?.toggleRecording()

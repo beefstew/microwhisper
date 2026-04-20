@@ -54,9 +54,9 @@ class TranscriptionManager {
             }
 
             // Copy wav file to desktop for debugging
-            let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
-            let copyURL = desktop.appendingPathComponent(fileURL.lastPathComponent)
-            try? FileManager.default.copyItem(at: fileURL, to: copyURL)
+//            let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
+//            let copyURL = desktop.appendingPathComponent(fileURL.lastPathComponent)
+//            try? FileManager.default.copyItem(at: fileURL, to: copyURL)
 
             // Clean up the audio file
             try? FileManager.default.removeItem(at: fileURL)

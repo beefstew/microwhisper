@@ -5,9 +5,9 @@ protocol AudioRecorderDelegate: AnyObject {
     func audioRecorderDidStartRecording()
     func audioRecorderDidStopRecording(fileURL: URL)
     func audioRecorderDidCompleteChunk(fileURL: URL)
-    func audioRecorderDidUpdateLevel(_ level: Float)
+    func audioRecorderDidUpdateLevel(_ levels: [Float])
     func audioRecorderDidFailWithError(_ error: Error)
-    func audioRecorderDidDetectDevices(microphoneAvailable: Bool, blackholeAvailable: Bool)
+    func audioRecorderDidDetectDevices(devices: [AudioRecorderManager.AudioDevice], microphoneAvailable: Bool)
 }
 
 class AudioRecorderManager: NSObject {
@@ -16,21 +16,18 @@ class AudioRecorderManager: NSObject {
     private var audioFile: AVAudioFile?
     private var recordedFileURL: URL?
     private(set) var isRecording = false
+    private(set) var isMonitoring = false
+    private var monitoredDeviceID: AudioDeviceID?
+    // Format used when the tap was installed; file writes must use this exact format.
+    private var tapFormat: AVAudioFormat?
 
-    // Audio source selection
-    enum AudioSource {
-        case microphone
-        case systemAudio
-        case both
+    struct AudioDevice: Identifiable, Equatable, Hashable {
+        let id: AudioDeviceID
+        let name: String
     }
 
-    private(set) var currentAudioSource: AudioSource = .microphone
-    private(set) var isBlackholeAvailable = false
-
-    // Audio device properties
-    private let blackholeDeviceName = "Blackholed Scarlett Mic"
-    private var blackholeDeviceID: AudioDeviceID?
-    private var defaultInputDeviceID: AudioDeviceID = 0
+    private(set) var inputDevices: [AudioDevice] = []
+    private(set) var defaultInputDeviceID: AudioDeviceID = 0
 
     // Chunking
     private var chunkTimer: Timer?
@@ -46,7 +43,9 @@ class AudioRecorderManager: NSObject {
     override init() {
         super.init()
         setupDeviceListener()
-        detectAudioDevices()
+        // detectAudioDevices() intentionally omitted: delegate is not yet wired up at init time.
+        // AppDelegate.applicationDidFinishLaunching calls detectAudioDevices() explicitly after
+        // delegates are set, so the result actually reaches the UI.
     }
 
     deinit {
@@ -55,47 +54,64 @@ class AudioRecorderManager: NSObject {
 
     // MARK: - Recording
 
-    func startRecording(from source: AudioSource = .microphone) {
+    func startRecording(device: AudioDevice) {
+        print("Recording from device: '\(device.name)' (ID \(device.id))")
+        startRecordingWithDeviceID(device.id)
+    }
+
+    private func startRecordingWithDeviceID(_ deviceID: AudioDeviceID) {
         let tempDir = FileManager.default.temporaryDirectory
         let fileName = "recording-\(UUID().uuidString).wav"
         recordedFileURL = tempDir.appendingPathComponent(fileName)
-        currentAudioSource = source
-
-        let deviceID: AudioDeviceID
-        switch source {
-        case .microphone:
-            deviceID = defaultInputDeviceID
-            print("Recording from microphone: ID \(deviceID)")
-        case .systemAudio:
-            guard let blackholeID = blackholeDeviceID, isBlackholeAvailable else {
-                delegate?.audioRecorderDidFailWithError(NSError(
-                    domain: "AudioRecorderManager", code: 1001,
-                    userInfo: [NSLocalizedDescriptionKey: "BlackHole audio device not available"]))
-                return
-            }
-            deviceID = blackholeID
-            print("Recording from system audio: ID \(deviceID)")
-        case .both:
-            delegate?.audioRecorderDidFailWithError(NSError(
-                domain: "AudioRecorderManager", code: 1003,
-                userInfo: [NSLocalizedDescriptionKey: "Recording from both sources simultaneously is not implemented yet"]))
-            return
-        }
 
         do {
-            let engine = AVAudioEngine()
-            try setInputDevice(deviceID, on: engine)
+            // Reuse the monitoring engine if it's already running on the same device;
+            // otherwise tear it down and set up fresh.
+            if !isMonitoring || monitoredDeviceID != deviceID {
+                stopMonitoring()
+                let engine = AVAudioEngine()
+                try setInputDevice(deviceID, on: engine)
 
-            let inputNode = engine.inputNode
-            let inputFormat = inputNode.outputFormat(forBus: 0)
-            print("Input format: \(inputFormat)")
+                // Use inputFormat(forBus:) to read the hardware format BEFORE starting the
+                // engine. installTap must be called before engine.start() on macOS, otherwise
+                // the tap may never receive buffers.
+                let inputNode = engine.inputNode
+                let liveFormat = inputNode.inputFormat(forBus: 0)
+                print("Input format: \(liveFormat)")
 
+                inputNode.installTap(onBus: 0, bufferSize: 4096, format: liveFormat) { [weak self] buffer, _ in
+                    guard let self = self else { return }
+                    if self.isRecording {
+                        do {
+                            try self.audioFile?.write(from: buffer)
+                        } catch {
+                            print("audioFile write error: \(error)")
+                        }
+                    }
+                    self.updateMeter(from: buffer)
+                }
+
+                engine.prepare()
+                try engine.start()
+
+                audioEngine = engine
+                tapFormat = liveFormat
+                isMonitoring = true
+                monitoredDeviceID = deviceID
+            }
+
+            // Open the output file using the exact same format the tap was installed with,
+            // so AVAudioFile.write(from:) never sees a format mismatch.
+            guard let liveFormat = tapFormat else {
+                throw NSError(domain: "AudioRecorderManager", code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Tap format unavailable"])
+            }
             // Write float32 to match the tap buffer format exactly, avoiding
             // any int16 conversion that can produce silence on playback.
             let fileSettings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatLinearPCM,
-                AVSampleRateKey: inputFormat.sampleRate,
-                AVNumberOfChannelsKey: inputFormat.channelCount,
+                AVSampleRateKey: liveFormat.sampleRate,
+                AVNumberOfChannelsKey: liveFormat.channelCount,
                 AVLinearPCMBitDepthKey: 32,
                 AVLinearPCMIsFloatKey: true,
                 AVLinearPCMIsBigEndianKey: false
@@ -103,14 +119,6 @@ class AudioRecorderManager: NSObject {
             currentFileSettings = fileSettings
             audioFile = try AVAudioFile(forWriting: recordedFileURL!, settings: fileSettings)
 
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-                guard let self = self, self.isRecording else { return }
-                try? self.audioFile?.write(from: buffer)
-                self.updateMeter(from: buffer)
-            }
-
-            try engine.start()
-            audioEngine = engine
             isRecording = true
             delegate?.audioRecorderDidStartRecording()
             startChunkTimer()
@@ -118,6 +126,9 @@ class AudioRecorderManager: NSObject {
         } catch {
             audioEngine?.inputNode.removeTap(onBus: 0)
             audioEngine = nil
+            isMonitoring = false
+            monitoredDeviceID = nil
+            tapFormat = nil
             audioFile = nil
             delegate?.audioRecorderDidFailWithError(error)
         }
@@ -131,14 +142,61 @@ class AudioRecorderManager: NSObject {
         waitingForChunkBoundary = false
         consecutiveSilentBuffers = 0
 
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
+        // Close the file but leave the engine and tap running for level monitoring.
         audioFile = nil  // closes and flushes
 
         if let fileURL = recordedFileURL {
             delegate?.audioRecorderDidStopRecording(fileURL: fileURL)
         }
+    }
+
+    func startMonitoring(deviceID: AudioDeviceID) {
+        if isMonitoring && monitoredDeviceID == deviceID { return }
+        if isMonitoring { stopMonitoring() }
+
+        do {
+            let engine = AVAudioEngine()
+            try setInputDevice(deviceID, on: engine)
+
+            // Read the hardware format BEFORE starting the engine, and install the tap
+            // BEFORE engine.start(). Installing a tap post-start can silently fail to
+            // deliver buffers on macOS.
+            let inputNode = engine.inputNode
+            let liveFormat = inputNode.inputFormat(forBus: 0)
+            print("Monitoring \(deviceID) with format: \(liveFormat)")
+
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: liveFormat) { [weak self] buffer, _ in
+                guard let self = self else { return }
+                if self.isRecording {
+                    do {
+                        try self.audioFile?.write(from: buffer)
+                    } catch {
+                        print("audioFile write error: \(error)")
+                    }
+                }
+                self.updateMeter(from: buffer)
+            }
+
+            engine.prepare()
+            try engine.start()
+
+            audioEngine = engine
+            tapFormat = liveFormat
+            monitoredDeviceID = deviceID
+            isMonitoring = true
+        } catch {
+            delegate?.audioRecorderDidFailWithError(error)
+        }
+    }
+
+    func stopMonitoring() {
+        guard !isRecording else { return }
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+        isMonitoring = false
+        monitoredDeviceID = nil
+        tapFormat = nil
     }
 
     // MARK: - Chunking
@@ -200,20 +258,28 @@ class AudioRecorderManager: NSObject {
         let frameCount = Int(buffer.frameLength)
         guard frameCount > 0 else { return }
 
-        var sum: Float = 0
+        var levels: [Float] = []
+        var sumAll: Float = 0
+
         for channel in 0..<channelCount {
+            var sum: Float = 0
             for frame in 0..<frameCount {
                 let sample = channelData[channel][frame]
                 sum += sample * sample
             }
+            let rms = sqrt(sum / Float(frameCount))
+            let db = 20 * log10(max(rms, 1e-7))
+            levels.append(max(0, min(1, (db + 50) / 50)))
+            sumAll += sum
         }
-        let rms = sqrt(sum / Float(channelCount * frameCount))
-        let db = 20 * log10(max(rms, 1e-7))
-        let level = max(0, min(1, (db + 50) / 50))
+
+        // Use averaged RMS across all channels for silence detection
+        let rmsAll = sqrt(sumAll / Float(channelCount * frameCount))
+        let dbAll = 20 * log10(max(rmsAll, 1e-7))
 
         // Silence detection for chunk splitting
         if waitingForChunkBoundary {
-            if db < silenceThresholdDB {
+            if dbAll < silenceThresholdDB {
                 consecutiveSilentBuffers += 1
                 if consecutiveSilentBuffers >= requiredSilentBuffers {
                     waitingForChunkBoundary = false
@@ -228,48 +294,57 @@ class AudioRecorderManager: NSObject {
         }
 
         DispatchQueue.main.async {
-            self.delegate?.audioRecorderDidUpdateLevel(level)
+            self.delegate?.audioRecorderDidUpdateLevel(levels)
         }
     }
 
     // MARK: - Device Detection
 
+    // Narrow listener: only react to device-list and default-input changes, not every
+    // unrelated property change on the system audio object.
+    private static let listenedSelectors: [AudioObjectPropertySelector] = [
+        kAudioHardwarePropertyDevices,
+        kAudioHardwarePropertyDefaultInputDevice
+    ]
+
+    private static let deviceListenerCallback: AudioObjectPropertyListenerProc = { (_, _, _, context) -> OSStatus in
+        guard let context = context else { return noErr }
+        let manager = Unmanaged<AudioRecorderManager>.fromOpaque(context).takeUnretainedValue()
+        manager.detectAudioDevices()
+        return noErr
+    }
+
     private func setupDeviceListener() {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertySelectorWildcard,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementWildcard)
-
-        let status = AudioObjectAddPropertyListener(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            { (_, _, _, context) -> OSStatus in
-                let manager = Unmanaged<AudioRecorderManager>.fromOpaque(context!).takeUnretainedValue()
-                manager.detectAudioDevices()
-                return noErr
-            },
-            UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
-
-        if status != noErr {
-            print("Error setting up device listener: \(status)")
+        let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        for selector in Self.listenedSelectors {
+            var address = AudioObjectPropertyAddress(
+                mSelector: selector,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            let status = AudioObjectAddPropertyListener(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                Self.deviceListenerCallback,
+                context)
+            if status != noErr {
+                print("Error setting up device listener for selector \(selector): \(status)")
+            }
         }
     }
 
     private func removeDeviceListener() {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertySelectorWildcard,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementWildcard)
-
-        AudioObjectRemovePropertyListener(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            { (_, _, _, context) -> OSStatus in
-                let manager = Unmanaged<AudioRecorderManager>.fromOpaque(context!).takeUnretainedValue()
-                manager.detectAudioDevices()
-                return noErr
-            },
-            UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
+        let context = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        for selector in Self.listenedSelectors {
+            var address = AudioObjectPropertyAddress(
+                mSelector: selector,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain)
+            AudioObjectRemovePropertyListener(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                Self.deviceListenerCallback,
+                context)
+        }
     }
 
     func detectAudioDevices() {
@@ -288,7 +363,7 @@ class AudioRecorderManager: NSObject {
 
         if result != noErr {
             print("Error getting devices property size: \(result)")
-            updateDeviceAvailability(microphoneAvailable: true, blackholeAvailable: false)
+            updateDeviceAvailability(microphoneAvailable: true)
             return
         }
 
@@ -305,7 +380,7 @@ class AudioRecorderManager: NSObject {
 
         if result != noErr {
             print("Error getting device IDs: \(result)")
-            updateDeviceAvailability(microphoneAvailable: true, blackholeAvailable: false)
+            updateDeviceAvailability(microphoneAvailable: true)
             return
         }
 
@@ -326,9 +401,18 @@ class AudioRecorderManager: NSObject {
             defaultInputDeviceID = defaultDeviceID
         }
 
-        var blackholeFound = false
+        var foundDevices: [AudioDevice] = []
 
         for deviceID in deviceIDs {
+            // Skip devices with no input streams
+            var streamAddress = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyStreams,
+                mScope: kAudioDevicePropertyScopeInput,
+                mElement: kAudioObjectPropertyElementMain)
+            var streamSize: UInt32 = 0
+            guard AudioObjectGetPropertyDataSize(deviceID, &streamAddress, 0, nil, &streamSize) == noErr,
+                  streamSize > 0 else { continue }
+
             address.mSelector = kAudioDevicePropertyDeviceNameCFString
             var deviceName: Unmanaged<CFString>?
             size = UInt32(MemoryLayout<CFString>.size)
@@ -343,24 +427,19 @@ class AudioRecorderManager: NSObject {
 
             if result == noErr, let cfName = deviceName?.takeRetainedValue() {
                 let name = cfName as String
-                print("Audio device found: '\(name)' (ID \(deviceID))")
-                if name.contains(blackholeDeviceName) {
-                    blackholeFound = true
-                    blackholeDeviceID = deviceID
-                    break
-                }
+                foundDevices.append(AudioDevice(id: deviceID, name: name))
             }
         }
 
-        isBlackholeAvailable = blackholeFound
-        updateDeviceAvailability(microphoneAvailable: true, blackholeAvailable: blackholeFound)
+        inputDevices = foundDevices
+        updateDeviceAvailability(microphoneAvailable: true)
     }
 
-    private func updateDeviceAvailability(microphoneAvailable: Bool, blackholeAvailable: Bool) {
+    private func updateDeviceAvailability(microphoneAvailable: Bool) {
         DispatchQueue.main.async {
             self.delegate?.audioRecorderDidDetectDevices(
-                microphoneAvailable: microphoneAvailable,
-                blackholeAvailable: blackholeAvailable)
+                devices: self.inputDevices,
+                microphoneAvailable: microphoneAvailable)
         }
     }
 

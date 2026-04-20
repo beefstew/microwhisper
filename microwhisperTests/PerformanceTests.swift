@@ -23,7 +23,7 @@ struct AudioPerformanceTests {
         // Measure the performance of starting recording
         let startTime = DispatchTime.now()
         
-        manager.startRecording(from: .microphone)     
+        manager.startRecording(device: AudioRecorderManager.AudioDevice(id: 0, name: "Mock Mic"))
         // Simulate recording for a short time
         try await Task.sleep(for: .milliseconds(500))
         
@@ -45,8 +45,8 @@ struct AudioPerformanceTests {
         let delegate = MockPerformanceAudioDelegate()
         manager.delegate = delegate
         
-        manager.startRecording(from: .microphone)
-        
+        manager.startRecording(device: AudioRecorderManager.AudioDevice(id: 0, name: "Mock Mic"))
+
         // Measure time to process 100 audio level updates
         let startTime = DispatchTime.now()
         
@@ -176,18 +176,13 @@ struct TranscriptionPerformanceTests {
 // Performance-optimized mock for audio delegate
 class MockPerformanceAudioDelegate: AudioRecorderDelegate {
     var updateCount: Int = 0
-    
+
     func audioRecorderDidStartRecording() {}
-    
     func audioRecorderDidStopRecording(fileURL: URL) {}
-    
-    func audioRecorderDidUpdateLevel(_ level: Float) {
-        updateCount += 1
-    }
-    
+    func audioRecorderDidCompleteChunk(fileURL: URL) {}
+    func audioRecorderDidUpdateLevel(_ levels: [Float]) { updateCount += 1 }
     func audioRecorderDidFailWithError(_ error: Error) {}
-    
-    func audioRecorderDidDetectDevices(microphoneAvailable: Bool, blackholeAvailable: Bool) {}
+    func audioRecorderDidDetectDevices(devices: [AudioRecorderManager.AudioDevice], microphoneAvailable: Bool) {}
 }
 
 // Extended MockTranscriptionManager with performance testing features

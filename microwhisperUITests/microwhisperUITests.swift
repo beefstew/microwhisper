@@ -84,48 +84,7 @@ final class microwhisperUITests: XCTestCase {
         
         // Verify menu items exist
         XCTAssertTrue(app.menuItems["Start Recording"].exists, "Start Recording menu item should exist")
-        XCTAssertTrue(app.menuItems["Audio Source"].exists, "Audio Source menu item should exist")
         XCTAssertTrue(app.menuItems["Quit"].exists, "Quit menu item should exist")
-    }
-    
-    @MainActor
-    func testAudioSourceSubmenu() throws {
-        // Print all available status items to help debug
-        print("Available status items: \(XCUIApplication().statusItems.debugDescription)")
-        
-        // For UI testing, we'll try to click on any status item
-        let statusItems = XCUIApplication().statusItems
-        
-        // Skip test if no status items are found
-        guard statusItems.count > 0 else {
-            XCTFail("No status items found")
-            return
-        }
-        
-        // Click on the first status item
-        statusItems.element(boundBy: 0).click()
-        
-        // Wait for Audio Source menu item to appear using expectations
-        let audioSourceExpectation = expectation(for: NSPredicate(format: "exists == true"), evaluatedWith: app.menuItems["Audio Source"], handler: nil)
-        XCTWaiter().wait(for: [audioSourceExpectation], timeout: 5.0)
-        
-        // Click on Audio Source submenu
-        app.menuItems["Audio Source"].click()
-        
-        // Wait for Microphone menu item to appear using expectations
-        let microphoneExpectation = expectation(for: NSPredicate(format: "exists == true"), evaluatedWith: app.menuItems["Microphone"], handler: nil)
-        XCTWaiter().wait(for: [microphoneExpectation], timeout: 5.0)
-        
-        // Verify audio source options exist
-        XCTAssertTrue(app.menuItems["Microphone"].exists, "Microphone option should exist")
-        
-        // BlackHole option may or may not exist depending on installation
-        // This is a conditional test
-        if app.menuItems["System Audio (BlackHole)"].exists {
-            XCTAssertTrue(true, "System Audio option exists")
-        } else {
-            print("System Audio option not available - BlackHole may not be installed")
-        }
     }
     
     // MARK: - Recording Tests
@@ -237,83 +196,6 @@ final class microwhisperUITests: XCTestCase {
         
         // Skip the window testing part as it's not reliable in the test environment
         // The main purpose of this test is to verify the menu bar icon exists and can be clicked
-    }
-    
-    // MARK: - Audio Source Selection Tests
-    
-    @MainActor
-    func testSwitchAudioSource() throws {
-        // Helper function to click the status item
-        func clickStatusItem() -> Bool {
-            let statusItems = XCUIApplication().statusItems
-            
-            // Print available status items for debugging
-            print("Available status items: \(statusItems.debugDescription)")
-            
-            guard statusItems.count > 0 else {
-                return false
-            }
-            
-            // Click the first status item
-            statusItems.element(boundBy: 0).click()
-            return true
-        }
-        
-        // Click on the status item
-        guard clickStatusItem() else {
-            XCTFail("No status items found")
-            return
-        }
-        
-        // Wait for menu to appear using expectations
-        let menuExpectation = expectation(for: NSPredicate(format: "exists == true"), evaluatedWith: app.menuItems["Audio Source"], handler: nil)
-        XCTWaiter().wait(for: [menuExpectation], timeout: 5.0)
-        
-        // Check if Audio Source menu item exists
-        guard app.menuItems["Audio Source"].exists else {
-            print("Audio Source menu item not found - skipping test")
-            return
-        }
-        
-        // Click on Audio Source submenu
-        app.menuItems["Audio Source"].click()
-        
-        // Wait for Microphone menu item to appear
-        let microphoneExpectation = expectation(for: NSPredicate(format: "exists == true"), evaluatedWith: app.menuItems["Microphone"], handler: nil)
-        XCTWaiter().wait(for: [microphoneExpectation], timeout: 5.0)
-        
-        // Check if Microphone menu item exists
-        guard app.menuItems["Microphone"].exists else {
-            print("Microphone menu item not found - skipping test")
-            return
-        }
-        
-        // Select Microphone
-        app.menuItems["Microphone"].click()
-        
-        // Wait for the menu to close and changes to take effect
-        let waitForMenuToClose = expectation(description: "Wait for menu to close")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            waitForMenuToClose.fulfill()
-        }
-        wait(for: [waitForMenuToClose], timeout: 3.0)
-        
-        // Verify we can start recording with microphone
-        guard clickStatusItem() else {
-            XCTFail("No status items found after selecting microphone")
-            return
-        }
-        
-        // Wait for Start Recording menu item to appear
-        let startRecordingExpectation = expectation(for: NSPredicate(format: "exists == true"), evaluatedWith: app.menuItems["Start Recording"], handler: nil)
-        XCTWaiter().wait(for: [startRecordingExpectation], timeout: 5.0)
-        
-        // Check if Start Recording menu item exists
-        XCTAssertTrue(app.menuItems["Start Recording"].exists, "Should be able to start recording after selecting microphone")
-        
-        // For UI testing purposes, we'll consider the test passed here
-        // Testing BlackHole is optional and can cause timeouts
-        print("Basic audio source switching test passed - skipping BlackHole test")
     }
     
     // MARK: - Performance Tests
