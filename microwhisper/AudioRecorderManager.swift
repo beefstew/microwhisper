@@ -40,6 +40,31 @@ class AudioRecorderManager: NSObject {
     // Saved so chunk rotation can open the next file in the same format
     private var currentFileSettings: [String: Any] = [:]
 
+    // Serial queue that owns all AVAudioFile lifecycle + writes, so the render
+    // thread tap callback never blocks on disk I/O. All reads/writes of
+    // `audioFile`, `recordedFileURL`, and `currentFileSettings` that touch
+    // disk go through this queue.
+    private let writeQueue = DispatchQueue(
+        label: "net.beefstew.microwhisper.audioWrite",
+        qos: .userInitiated)
+
+    /// Copy a tap buffer so the underlying PCM storage can be handed off to
+    /// another thread safely. AVAudioEngine is free to reuse the backing store
+    /// after the tap callback returns.
+    private static func copyBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let copy = AVAudioPCMBuffer(pcmFormat: buffer.format,
+                                          frameCapacity: buffer.frameLength) else { return nil }
+        copy.frameLength = buffer.frameLength
+        let frames = Int(buffer.frameLength)
+        let channels = Int(buffer.format.channelCount)
+        if let src = buffer.floatChannelData, let dst = copy.floatChannelData {
+            for ch in 0..<channels {
+                memcpy(dst[ch], src[ch], frames * MemoryLayout<Float>.size)
+            }
+        }
+        return copy
+    }
+
     override init() {
         super.init()
         setupDeviceListener()
@@ -81,14 +106,21 @@ class AudioRecorderManager: NSObject {
 
                 inputNode.installTap(onBus: 0, bufferSize: 4096, format: liveFormat) { [weak self] buffer, _ in
                     guard let self = self else { return }
-                    if self.isRecording {
-                        do {
-                            try self.audioFile?.write(from: buffer)
-                        } catch {
-                            print("audioFile write error: \(error)")
+                    // Level meter math is CPU-only and safe on the render thread.
+                    self.updateMeter(from: buffer)
+                    guard self.isRecording else { return }
+                    // Copy the buffer so the engine can reuse its backing storage,
+                    // then perform the actual disk write off the render thread.
+                    if let copy = Self.copyBuffer(buffer) {
+                        self.writeQueue.async { [weak self] in
+                            guard let self = self else { return }
+                            do {
+                                try self.audioFile?.write(from: copy)
+                            } catch {
+                                NSLog("audioFile write error: %@", String(describing: error))
+                            }
                         }
                     }
-                    self.updateMeter(from: buffer)
                 }
 
                 engine.prepare()
@@ -117,7 +149,12 @@ class AudioRecorderManager: NSObject {
                 AVLinearPCMIsBigEndianKey: false
             ]
             currentFileSettings = fileSettings
-            audioFile = try AVAudioFile(forWriting: recordedFileURL!, settings: fileSettings)
+            // Own all AVAudioFile lifecycle on writeQueue. Using sync here so any
+            // error propagates into the surrounding do/catch.
+            let fileURL = recordedFileURL!
+            try writeQueue.sync {
+                audioFile = try AVAudioFile(forWriting: fileURL, settings: fileSettings)
+            }
 
             isRecording = true
             delegate?.audioRecorderDidStartRecording()
@@ -142,8 +179,11 @@ class AudioRecorderManager: NSObject {
         waitingForChunkBoundary = false
         consecutiveSilentBuffers = 0
 
-        // Close the file but leave the engine and tap running for level monitoring.
-        audioFile = nil  // closes and flushes
+        // Close the file on writeQueue so any in-flight writes drain first,
+        // and so file-handle ownership stays on a single queue.
+        writeQueue.sync {
+            audioFile = nil  // closes and flushes
+        }
 
         if let fileURL = recordedFileURL {
             delegate?.audioRecorderDidStopRecording(fileURL: fileURL)
@@ -167,14 +207,21 @@ class AudioRecorderManager: NSObject {
 
             inputNode.installTap(onBus: 0, bufferSize: 4096, format: liveFormat) { [weak self] buffer, _ in
                 guard let self = self else { return }
-                if self.isRecording {
-                    do {
-                        try self.audioFile?.write(from: buffer)
-                    } catch {
-                        print("audioFile write error: \(error)")
+                // Level meter math is CPU-only and safe on the render thread.
+                self.updateMeter(from: buffer)
+                guard self.isRecording else { return }
+                // Copy the buffer so the engine can reuse its backing storage,
+                // then perform the actual disk write off the render thread.
+                if let copy = Self.copyBuffer(buffer) {
+                    self.writeQueue.async { [weak self] in
+                        guard let self = self else { return }
+                        do {
+                            try self.audioFile?.write(from: copy)
+                        } catch {
+                            NSLog("audioFile write error: %@", String(describing: error))
+                        }
                     }
                 }
-                self.updateMeter(from: buffer)
             }
 
             engine.prepare()
@@ -209,20 +256,20 @@ class AudioRecorderManager: NSObject {
         }
     }
 
-    /// Called from the audio tap thread when silence is detected after a chunk boundary.
+    /// Called on writeQueue when silence is detected after a chunk boundary.
+    /// Owning file-handle lifecycle on writeQueue keeps it serialized with the
+    /// tap's write path.
     private func splitChunk() {
         guard let completedURL = recordedFileURL, isRecording else { return }
 
         let newURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("recording-\(UUID().uuidString).wav")
 
-        // Close the current file and open a new one.
-        // Both happen on the audio thread so there is no concurrent access.
+        // Close the current file and open a new one. Disk I/O runs on
+        // writeQueue, never on the render callback.
         audioFile = nil
         recordedFileURL = newURL
         audioFile = try? AVAudioFile(forWriting: newURL, settings: currentFileSettings)
-
-        print("Chunk split: dispatching \(completedURL.lastPathComponent)")
 
         DispatchQueue.main.async { [weak self] in
             self?.delegate?.audioRecorderDidCompleteChunk(fileURL: completedURL)
@@ -259,7 +306,7 @@ class AudioRecorderManager: NSObject {
         guard frameCount > 0 else { return }
 
         var levels: [Float] = []
-        var sumAll: Float = 0
+        var maxDb: Float = -.infinity
 
         for channel in 0..<channelCount {
             var sum: Float = 0
@@ -269,22 +316,26 @@ class AudioRecorderManager: NSObject {
             }
             let rms = sqrt(sum / Float(frameCount))
             let db = 20 * log10(max(rms, 1e-7))
+            maxDb = max(maxDb, db)
             levels.append(max(0, min(1, (db + 50) / 50)))
-            sumAll += sum
         }
 
-        // Use averaged RMS across all channels for silence detection
-        let rmsAll = sqrt(sumAll / Float(channelCount * frameCount))
-        let dbAll = 20 * log10(max(rmsAll, 1e-7))
+        // Use the loudest channel's dB (not a cross-channel average) so one
+        // quiet channel can't pull the level below the threshold while a hot
+        // channel still carries speech. This is the dB equivalent of
+        // `levels.max()` on the normalized meter values.
+        let loudestDb = maxDb
 
         // Silence detection for chunk splitting
         if waitingForChunkBoundary {
-            if dbAll < silenceThresholdDB {
+            if loudestDb < silenceThresholdDB {
                 consecutiveSilentBuffers += 1
                 if consecutiveSilentBuffers >= requiredSilentBuffers {
                     waitingForChunkBoundary = false
                     consecutiveSilentBuffers = 0
-                    splitChunk()
+                    writeQueue.async { [weak self] in
+                        self?.splitChunk()
+                    }
                 }
             } else {
                 consecutiveSilentBuffers = 0

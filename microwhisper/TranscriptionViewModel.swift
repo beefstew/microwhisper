@@ -18,6 +18,10 @@ class TranscriptionViewModel: ObservableObject {
     @Published var availableInputDevices: [AudioRecorderManager.AudioDevice] = []
     @Published var selectedDevice: AudioRecorderManager.AudioDevice? = nil {
         didSet {
+            // Guard against redundant re-entry: SwiftUI bindings and the
+            // AppDelegate's device-detection callback both write this property,
+            // and an unchanged assignment here caused AttributeGraph cycles.
+            guard selectedDevice != oldValue else { return }
             appDelegate?.selectedDeviceChanged(to: selectedDevice)
         }
     }

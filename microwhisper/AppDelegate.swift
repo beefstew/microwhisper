@@ -47,9 +47,14 @@ extension AppDelegate: AudioRecorderDelegate {
             self.viewModel.isMicrophoneAvailable = microphoneAvailable
 
             // Auto-select the system default input device on first run, or recover if the
-            // previously selected device has disappeared (e.g. unplugged).
+            // previously selected device has disappeared (e.g. unplugged). Only write
+            // when the value would actually change, so the didSet side-effect chain
+            // doesn't fire redundantly.
             if self.viewModel.selectedDevice == nil || !devices.contains(self.viewModel.selectedDevice!) {
-                self.viewModel.selectedDevice = devices.first(where: { $0.id == self.audioManager.defaultInputDeviceID }) ?? devices.first
+                let newSelection = devices.first(where: { $0.id == self.audioManager.defaultInputDeviceID }) ?? devices.first
+                if self.viewModel.selectedDevice != newSelection {
+                    self.viewModel.selectedDevice = newSelection
+                }
             }
         }
     }
@@ -59,6 +64,7 @@ extension AppDelegate: AudioRecorderDelegate {
             self.viewModel.clearTranscriptIfNeeded()
             self.viewModel.isRecording = true
         }
+        transcriptionManager.startSession()
     }
 
     func audioRecorderDidStopRecording(fileURL: URL) {
@@ -66,7 +72,11 @@ extension AppDelegate: AudioRecorderDelegate {
         DispatchQueue.main.async {
             self.viewModel.isRecording = false
         }
+        // Transcribe the final chunk, then ask TranscriptionManager to save the
+        // full session transcript. Because transcriptionQueue is serial, the
+        // save runs strictly after the final chunk's transcription completes.
         transcriptionManager.transcribeAudio(at: fileURL)
+        transcriptionManager.endSession()
     }
 
     func audioRecorderDidCompleteChunk(fileURL: URL) {
@@ -94,11 +104,17 @@ extension AppDelegate: TranscriptionManagerDelegate {
     }
     
     func transcriptionManager(_ manager: TranscriptionManager, didCompleteWithTranscription transcription: String) {
-        viewModel.appendTranscript("\n\(transcription)")
+        // Defensive main-thread hop: TranscriptionManager today dispatches before
+        // calling the delegate, but we don't want the view model to depend on that.
+        DispatchQueue.main.async {
+            self.viewModel.appendTranscript("\n\(transcription)")
+        }
     }
-    
+
     func transcriptionManager(_ manager: TranscriptionManager, didFailWithError error: Error) {
-        viewModel.appendTranscript("\nError running transcription: \(error)")
+        DispatchQueue.main.async {
+            self.viewModel.appendTranscript("\nError running transcription: \(error)")
+        }
     }
 }
 

@@ -15,6 +15,52 @@ class TranscriptionManager {
     private let transcriptionQueue = DispatchQueue(label: "com.microwhisper.transcription",
                                                    qos: .userInitiated)
 
+    // Accumulated transcript for the current recording session.
+    // Only read/written from transcriptionQueue.
+    private var sessionTranscript: String = ""
+    private var sessionStartDate: Date?
+
+    /// Must be called from AppDelegate when a new recording session begins.
+    /// Resets the in-memory session buffer so chunk transcripts append to a
+    /// fresh session.
+    func startSession() {
+        transcriptionQueue.async { [weak self] in
+            self?.sessionTranscript = ""
+            self?.sessionStartDate = Date()
+        }
+    }
+
+    /// Must be called after the final `transcribeAudio(at:)` call for a session.
+    /// Because transcriptionQueue is serial, the save task runs after every
+    /// in-flight chunk transcription completes.
+    func endSession() {
+        transcriptionQueue.async { [weak self] in
+            self?.saveSessionTranscript()
+        }
+    }
+
+    /// Runs on transcriptionQueue.
+    private func saveSessionTranscript() {
+        let text = sessionTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        defer {
+            sessionTranscript = ""
+            sessionStartDate = nil
+        }
+        guard !text.isEmpty else { return }
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH_mm"
+        let timestamp = formatter.string(from: sessionStartDate ?? Date())
+        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
+        let destURL = desktop.appendingPathComponent("transcript \(timestamp).txt")
+        do {
+            try text.write(to: destURL, atomically: true, encoding: .utf8)
+            NSLog("Session transcript saved: %@", destURL.lastPathComponent)
+        } catch {
+            NSLog("Failed to save session transcript: %@", String(describing: error))
+        }
+    }
+
     func transcribeAudio(at fileURL: URL) {
         transcriptionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -117,7 +163,15 @@ class TranscriptionManager {
         if let raw = rawText {
             let cleaned = cleanTranscription(raw)
             if !cleaned.isEmpty {
-                saveTranscriptToDesktop(cleaned)
+                // Append to the session buffer. We're already on transcriptionQueue
+                // (handleTranscriptionOutput is called from the queue via
+                // transcribeAudio), so the append is serialized with other chunks
+                // and with start/endSession.
+                if sessionTranscript.isEmpty {
+                    sessionTranscript = cleaned
+                } else {
+                    sessionTranscript += "\n" + cleaned
+                }
                 DispatchQueue.main.async {
                     self.delegate?.transcriptionManager(self, didCompleteWithTranscription: cleaned)
                 }
@@ -152,13 +206,4 @@ class TranscriptionManager {
         return segments.joined(separator: " ")
     }
 
-    private func saveTranscriptToDesktop(_ text: String) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH_mm"
-        let timestamp = formatter.string(from: Date())
-        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
-        let destURL = desktop.appendingPathComponent("transcript \(timestamp).txt")
-        try? text.write(to: destURL, atomically: true, encoding: .utf8)
-        print("Transcript saved to desktop: \(destURL.lastPathComponent)")
-    }
 }

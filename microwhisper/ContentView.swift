@@ -3,9 +3,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var viewModel: TranscriptionViewModel
     @State private var hoveringCopy: Bool = false
-    
+
     var body: some View {
-        ZStack {
+        return ZStack {
             VisualEffectView(material: .contentBackground, blendingMode: .withinWindow)
                 .edgesIgnoringSafeArea(.all)
             
@@ -25,7 +25,7 @@ struct ContentView: View {
                             .pickerStyle(.menu)
                             .frame(maxWidth: 350)
                             .disabled(viewModel.isRecording)
-
+                          
                             // Record button
                             Button(action: {
                                 viewModel.toggleRecording()
@@ -78,12 +78,13 @@ struct ContentView: View {
 
                                 AutoScrollTextView(text: viewModel.transcript)
                                     .frame(maxWidth: .infinity)
-                                    .frame(minHeight: 100, maxHeight: .infinity)
-                                    .background(Color(NSColor.textBackgroundColor).opacity(0.2))
+                                    .frame(minHeight: 200, maxHeight: .infinity)
+//                                    .background(Color(NSColor.textBackgroundColor).opacity(0.4))
+                                    .background(Color("aqua").opacity(0.5))
                                     .cornerRadius(12)
                             }
                             .padding(.horizontal, 30)
-                            .frame(minHeight: 300, maxHeight: viewModel.isRecording ? 500 : .infinity)
+                            .frame(minHeight: 200, maxHeight: .infinity)
                             .animation(.easeInOut(duration: 0.3), value: viewModel.isRecording)
                             .transition(.opacity)
                         }
@@ -107,7 +108,7 @@ struct ContentView: View {
 #Preview("Recording") {
     let vm = TranscriptionViewModel()
     vm.isRecording = true
-    vm.audioLevels = [0.7, 0.5]
+    vm.audioLevels = [0.8, 0.5]
     vm.transcript = "This is a sample transcript that has been captured from the microphone."
     vm.showTranscript = true
     return ContentView().environmentObject(vm)
@@ -185,7 +186,7 @@ struct AudioLevelMeter: View {
     private let colors: [Color] = [.green, .green, .green, .yellow, .red]
 
     var body: some View {
-        VStack(spacing: 3) {
+        return VStack(spacing: 3) {
             ForEach(0..<levels.count, id: \.self) { ch in
                 row(for: levels[ch])
             }
