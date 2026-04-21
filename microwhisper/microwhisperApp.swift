@@ -11,18 +11,11 @@ import SwiftUI
 @main
 struct MicrowhisperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    
+
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
-        DispatchQueue.main.async {
-            NSApplication.shared.windows.forEach { window in
-                window.titlebarAppearsTransparent = true
-                window.titleVisibility = .visible
-                window.backgroundColor = .windowBackgroundColor
-            }
-        }
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -30,6 +23,32 @@ struct MicrowhisperApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
+
+        MenuBarExtra {
+            MenuBarMenuContent(appDelegate: appDelegate)
+        } label: {
+            MenuBarLabel(appDelegate: appDelegate)
+        }
+    }
+}
+
+private struct MenuBarMenuContent: View {
+    @ObservedObject var appDelegate: AppDelegate
+
+    var body: some View {
+        Button(appDelegate.isRecording ? "Stop Recording" : "Start Recording") {
+            appDelegate.toggleRecording()
+        }
+        Divider()
+        Button("Quit") { NSApp.terminate(nil) }
+    }
+}
+
+private struct MenuBarLabel: View {
+    @ObservedObject var appDelegate: AppDelegate
+
+    var body: some View {
+        Image(systemName: appDelegate.isRecording ? "mic.fill" : "mic")
     }
 }
 

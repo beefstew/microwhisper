@@ -1,12 +1,12 @@
 import Cocoa
 import AVFoundation
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var viewModel = TranscriptionViewModel()
     private let audioManager = AudioRecorderManager()
-    private let statusBarManager = StatusBarManager()
     private let transcriptionManager = TranscriptionManager()
-    
+
+    @Published private(set) var isRecording = false
     private(set) var isMicrophoneAvailable = true
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -36,18 +36,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupDelegates() {
         viewModel.appDelegate = self
         audioManager.delegate = self
-        statusBarManager.delegate = self
         transcriptionManager.delegate = self
     }
     
-}
-
-// MARK: - StatusBarManagerDelegate
-extension AppDelegate: StatusBarManagerDelegate {
-    func statusBarManagerDidToggleRecording() {
-        toggleRecording()
-    }
-
 }
 
 // MARK: - AudioRecorderDelegate
@@ -72,8 +63,8 @@ extension AppDelegate: AudioRecorderDelegate {
         }
     }
     func audioRecorderDidStartRecording() {
-        statusBarManager.updateRecordingState(isRecording: true)
         DispatchQueue.main.async {
+            self.isRecording = true
             self.viewModel.clearTranscriptIfNeeded()
             self.viewModel.isRecording = true
         }
@@ -81,8 +72,8 @@ extension AppDelegate: AudioRecorderDelegate {
     }
 
     func audioRecorderDidStopRecording(fileURL: URL) {
-        statusBarManager.updateRecordingState(isRecording: false)
         DispatchQueue.main.async {
+            self.isRecording = false
             self.viewModel.isRecording = false
         }
         // Transcribe the final chunk, then ask TranscriptionManager to save the
