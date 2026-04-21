@@ -29,6 +29,7 @@ A macOS application that provides near real-time audio transcription using OpenA
     1. Click the "+" button in the bottom left and add an Aggregate audio device with your Microphone device and BlackHole 2ch
     2. Click the "+" button in the bottom left and add a Multi-Output device with your Speaker device and BlackHole 2ch
 
+---
 
 ### Option A
 1. Download the DMG from [Releases](https://github.com/beefstew/microwhisper/releases)
@@ -52,6 +53,7 @@ A macOS application that provides near real-time audio transcription using OpenA
 2. Open the project in Xcode
 3. Build and run the project form Xcode
 
+---
 
 9. You'll be prompted to grant permission to access the Microphone on the first use; say yes
 10. In Settings, specify the location of the `.bin` model that you want to use with whisper.cpp 
