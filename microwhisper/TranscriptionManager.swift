@@ -73,6 +73,21 @@ class TranscriptionManager {
             defer { DispatchQueue.main.async { self?.pendingTaskCount -= 1 } }
             guard let self = self else { return }
 
+            let modelPath = UserDefaults.standard.string(forKey: SettingsKey.whisperModelPath) ?? ""
+            guard !modelPath.isEmpty, FileManager.default.fileExists(atPath: modelPath) else {
+                let message = modelPath.isEmpty
+                    ? "No Whisper model selected. Open MicroWhisper → Settings to choose a .bin file."
+                    : "Whisper model not found at \(modelPath). Update the path in MicroWhisper → Settings."
+                let error = NSError(domain: "com.microwhisper.transcription",
+                                    code: 1,
+                                    userInfo: [NSLocalizedDescriptionKey: message])
+                DispatchQueue.main.async {
+                    self.delegate?.transcriptionManager(self, didFailWithError: error)
+                }
+                try? FileManager.default.removeItem(at: fileURL)
+                return
+            }
+
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/local/bin/whisper")
 
@@ -81,7 +96,7 @@ class TranscriptionManager {
             process.environment = env
 
             let outputFile = fileURL.deletingPathExtension().path
-            process.arguments = self.createWhisperArguments(for: fileURL, outputFile: outputFile)
+            process.arguments = self.createWhisperArguments(for: fileURL, outputFile: outputFile, modelPath: modelPath)
 
             let pipe = Pipe()
             process.standardOutput = pipe
@@ -117,11 +132,11 @@ class TranscriptionManager {
         }
     }
 
-    private func createWhisperArguments(for fileURL: URL, outputFile: String) -> [String] {
+    private func createWhisperArguments(for fileURL: URL, outputFile: String, modelPath: String) -> [String] {
         return [
             fileURL.path,
 //            "--model", "base.en",
-            "--model", "/Users/chorn/Applications/whisper.cpp/models/ggml-large-v2.bin",
+            "--model", modelPath,
 //            "--output_format", "txt",
             "--output-txt",
             "--output-file", outputFile,

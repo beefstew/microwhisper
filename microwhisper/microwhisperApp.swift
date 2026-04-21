@@ -24,6 +24,10 @@ struct MicrowhisperApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
 
+        Settings {
+            SettingsView()
+        }
+
         MenuBarExtra {
             MenuBarMenuContent(appDelegate: appDelegate)
         } label: {
@@ -38,6 +42,10 @@ private struct MenuBarMenuContent: View {
     var body: some View {
         Button(appDelegate.isRecording ? "Stop Recording" : "Start Recording") {
             appDelegate.toggleRecording()
+        }
+        Divider()
+        SettingsLink {
+            Text("Settings…")
         }
         Divider()
         Button("Quit") { NSApp.terminate(nil) }
