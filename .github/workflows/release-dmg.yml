@@ -2,39 +2,55 @@ name: Build & Release DMG
 
 on:
   push:
-    tags:
-      - 'v*'          # e.g. v1.0.0
-  workflow_dispatch:  # manual test runs (produces artifact, no release)
+    tags: ['v*']         # e.g. v1.0.0
+  workflow_dispatch:     # manual test runs (produces artifact, no release)
 
-permissions:
-  contents: write     # needed to create the GitHub Release
+# Start from zero; each job grants only what it needs.
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
-    runs-on: macos-latest   # currently macOS 15, Apple Silicon
+    name: Build DMG
+    runs-on: macos-latest
     timeout-minutes: 30
-
+    permissions:
+      contents: read        # no write token reachable from the build step
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (no persisted creds)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false   # don't leave the token in .git/config
 
-      - name: Show toolchain
+      - name: Toolchain info
         run: |
           sw_vers
           xcodebuild -version
-          xcode-select -p
 
-      - name: Resolve version & filename
+      - name: Resolve version
         id: v
+        env:
+          REF: ${{ github.ref }}   # pass context through env, never into shell directly
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ "$REF" == refs/tags/* ]]; then
+            VERSION="${REF#refs/tags/v}"
           else
             VERSION="dev-$(git rev-parse --short HEAD)"
           fi
-          echo "version=$VERSION"                  >> "$GITHUB_OUTPUT"
-          echo "dmg=MicroWhisper-${VERSION}.dmg"   >> "$GITHUB_OUTPUT"
+          # Refuse anything that isn't a plain version-ish string
+          if [[ ! "$VERSION" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "Rejecting suspicious version: $VERSION" >&2
+            exit 1
+          fi
+          echo "version=$VERSION"                >> "$GITHUB_OUTPUT"
+          echo "dmg=MicroWhisper-${VERSION}.dmg" >> "$GITHUB_OUTPUT"
 
-      - name: Build (universal, Release, no signing identity)
+      - name: Build (Release, universal, no signing identity)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           xcodebuild \
             -project microwhisper.xcodeproj \
@@ -46,6 +62,7 @@ jobs:
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="$VERSION" \
             clean build
 
       - name: Ad-hoc sign the .app
@@ -53,10 +70,10 @@ jobs:
           APP="build/Build/Products/Release/microwhisper.app"
           codesign --force --deep --sign - --timestamp=none "$APP"
           codesign --verify --verbose "$APP"
-          # Sanity check: the binary actually has a signature macOS will load.
-          codesign -dv --verbose=2 "$APP" 2>&1 | grep -E 'Signature|Authority|TeamIdentifier|flags' || true
 
       - name: Create DMG
+        env:
+          DMG: ${{ steps.v.outputs.dmg }}
         run: |
           STAGE=build/dmg-stage
           rm -rf "$STAGE" && mkdir -p "$STAGE"
@@ -66,25 +83,44 @@ jobs:
             -volname "MicroWhisper" \
             -srcfolder "$STAGE" \
             -ov -format UDZO \
-            "${{ steps.v.outputs.dmg }}"
-          ls -lh "${{ steps.v.outputs.dmg }}"
+            "$DMG"
 
-      # Manual runs: keep the DMG as a workflow artifact for inspection.
       - name: Upload DMG as workflow artifact
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: MicroWhisper-DMG
+          name: dmg
           path: ${{ steps.v.outputs.dmg }}
           if-no-files-found: error
+          archive: false       # keeps the .dmg intact, no zip wrapper
+          retention-days: 7
 
-      # Tag runs: publish a GitHub Release with the DMG attached.
+  release:
+    name: Publish Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest      # cheaper & isolated from the build env
+    timeout-minutes: 10
+    permissions:
+      contents: write           # the only place a write token exists
+    steps:
+      - name: Download DMG
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: dmg
+
       - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO:  ${{ github.repository }}
+          TAG:      ${{ github.ref_name }}
         run: |
-          gh release create "${GITHUB_REF#refs/tags/}" \
-            --title "MicroWhisper ${{ steps.v.outputs.version }}" \
+          shopt -s nullglob
+          files=( *.dmg )
+          if (( ${#files[@]} != 1 )); then
+            echo "Expected exactly one DMG, got ${#files[@]}" >&2
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --title "MicroWhisper ${TAG#v}" \
             --generate-notes \
-            "${{ steps.v.outputs.dmg }}"
+            "${files[0]}"

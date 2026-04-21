@@ -30,9 +30,10 @@
 		824E72B62F9722C900846D62 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
 		824E72B72F9722E000846D62 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = SOURCE_ROOT; };
 		824E72B82F9722F000846D62 /* MicroWhisper_Notes.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MicroWhisper_Notes.md; sourceTree = SOURCE_ROOT; };
-		824E72B92F97232300846D62 /* release-dmg.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "release-dmg.yml"; sourceTree = "<group>"; };
-		824E72BA2F97232300846D62 /* test.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = test.yml; sourceTree = "<group>"; };
 		824E72BC2F97234F00846D62 /* Screenshot 2026-04-20.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Screenshot 2026-04-20.png"; sourceTree = SOURCE_ROOT; };
+		824E72BD2F9726CC00846D62 /* release-dmg.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "release-dmg.yml"; sourceTree = "<group>"; };
+		824E72BE2F9726CC00846D62 /* test.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = test.yml; sourceTree = "<group>"; };
+		824E72C12F9726E400846D62 /* dependabot.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = dependabot.yml; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -102,8 +103,8 @@
 		824E72B52F97222100846D62 /* Root files */ = {
 			isa = PBXGroup;
 			children = (
+				824E72C02F9726CC00846D62 /* .github */,
 				824E72BC2F97234F00846D62 /* Screenshot 2026-04-20.png */,
-				824E72BB2F97232300846D62 /* workflows */,
 				824E72B82F9722F000846D62 /* MicroWhisper_Notes.md */,
 				824E72B72F9722E000846D62 /* LICENSE */,
 				824E72B62F9722C900846D62 /* README.md */,
@@ -111,14 +112,22 @@
 			path = "Root files";
 			sourceTree = "<group>";
 		};
-		824E72BB2F97232300846D62 /* workflows */ = {
+		824E72BF2F9726CC00846D62 /* workflows */ = {
 			isa = PBXGroup;
 			children = (
-				824E72B92F97232300846D62 /* release-dmg.yml */,
-				824E72BA2F97232300846D62 /* test.yml */,
+				824E72BD2F9726CC00846D62 /* release-dmg.yml */,
+				824E72BE2F9726CC00846D62 /* test.yml */,
 			);
-			name = workflows;
-			path = .github/workflows;
+			path = workflows;
+			sourceTree = "<group>";
+		};
+		824E72C02F9726CC00846D62 /* .github */ = {
+			isa = PBXGroup;
+			children = (
+				824E72C12F9726E400846D62 /* dependabot.yml */,
+				824E72BF2F9726CC00846D62 /* workflows */,
+			);
+			path = .github;
 			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
