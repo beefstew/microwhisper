@@ -1,0 +1,90 @@
+name: Build & Release DMG
+
+on:
+  push:
+    tags:
+      - 'v*'          # e.g. v1.0.0
+  workflow_dispatch:  # manual test runs (produces artifact, no release)
+
+permissions:
+  contents: write     # needed to create the GitHub Release
+
+jobs:
+  build:
+    runs-on: macos-latest   # currently macOS 15, Apple Silicon
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Resolve version & filename
+        id: v
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION"                  >> "$GITHUB_OUTPUT"
+          echo "dmg=MicroWhisper-${VERSION}.dmg"   >> "$GITHUB_OUTPUT"
+
+      - name: Build (universal, Release, no signing identity)
+        run: |
+          xcodebuild \
+            -project microwhisper.xcodeproj \
+            -scheme microwhisper \
+            -configuration Release \
+            -derivedDataPath build \
+            ARCHS="arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            clean build
+
+      - name: Ad-hoc sign the .app
+        run: |
+          APP="build/Build/Products/Release/microwhisper.app"
+          codesign --force --deep --sign - --timestamp=none "$APP"
+          codesign --verify --verbose "$APP"
+          # Sanity check: the binary actually has a signature macOS will load.
+          codesign -dv --verbose=2 "$APP" 2>&1 | grep -E 'Signature|Authority|TeamIdentifier|flags' || true
+
+      - name: Create DMG
+        run: |
+          STAGE=build/dmg-stage
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          cp -R build/Build/Products/Release/microwhisper.app "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create \
+            -volname "MicroWhisper" \
+            -srcfolder "$STAGE" \
+            -ov -format UDZO \
+            "${{ steps.v.outputs.dmg }}"
+          ls -lh "${{ steps.v.outputs.dmg }}"
+
+      # Manual runs: keep the DMG as a workflow artifact for inspection.
+      - name: Upload DMG as workflow artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: MicroWhisper-DMG
+          path: ${{ steps.v.outputs.dmg }}
+          if-no-files-found: error
+
+      # Tag runs: publish a GitHub Release with the DMG attached.
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF#refs/tags/}" \
+            --title "MicroWhisper ${{ steps.v.outputs.version }}" \
+            --generate-notes \
+            "${{ steps.v.outputs.dmg }}"

@@ -27,6 +27,12 @@
 		168921BD2D5A83AF003126B8 /* microwhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = microwhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		168921CE2D5A83B0003126B8 /* microwhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = microwhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		168921D82D5A83B1003126B8 /* microwhisperUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = microwhisperUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		824E72B62F9722C900846D62 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
+		824E72B72F9722E000846D62 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = SOURCE_ROOT; };
+		824E72B82F9722F000846D62 /* MicroWhisper_Notes.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = MicroWhisper_Notes.md; sourceTree = SOURCE_ROOT; };
+		824E72B92F97232300846D62 /* release-dmg.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = "release-dmg.yml"; sourceTree = "<group>"; };
+		824E72BA2F97232300846D62 /* test.yml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = test.yml; sourceTree = "<group>"; };
+		824E72BC2F97234F00846D62 /* Screenshot 2026-04-20.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Screenshot 2026-04-20.png"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -79,6 +85,7 @@
 				168921D12D5A83B0003126B8 /* microwhisperTests */,
 				168921DB2D5A83B1003126B8 /* microwhisperUITests */,
 				168921BE2D5A83AF003126B8 /* Products */,
+				824E72B52F97222100846D62 /* Root files */,
 			);
 			sourceTree = "<group>";
 		};
@@ -91,6 +98,28 @@
 			);
 			name = Products;
 			sourceTree = "<group>";
+		};
+		824E72B52F97222100846D62 /* Root files */ = {
+			isa = PBXGroup;
+			children = (
+				824E72BC2F97234F00846D62 /* Screenshot 2026-04-20.png */,
+				824E72BB2F97232300846D62 /* workflows */,
+				824E72B82F9722F000846D62 /* MicroWhisper_Notes.md */,
+				824E72B72F9722E000846D62 /* LICENSE */,
+				824E72B62F9722C900846D62 /* README.md */,
+			);
+			path = "Root files";
+			sourceTree = "<group>";
+		};
+		824E72BB2F97232300846D62 /* workflows */ = {
+			isa = PBXGroup;
+			children = (
+				824E72B92F97232300846D62 /* release-dmg.yml */,
+				824E72BA2F97232300846D62 /* test.yml */,
+			);
+			name = workflows;
+			path = .github/workflows;
+			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
 
