@@ -2,7 +2,7 @@
 
 A macOS application that provides near real-time audio transcription using OpenAI's Whisper model. The app sits in your menu bar and can be triggered with a global keyboard shortcut to start/stop recording. It supports recording off any of your audio devices.
 
-![image](./Screenshot 2026-04-20.png)
+![Screenshot of MicroWhisper](https://raw.githubusercontent.com/beefstew/microwhisper/refs/heads/main/Screenshot%202026-04-20.png)
 
 ## Features
 
