@@ -64,10 +64,10 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="$VERSION" \
             clean build
-
-        - name: Verify icon made it into the bundle
-            run: |
-              APP="build/Build/Products/Release/microwhisper.app"
+      
+      - name: Verify icon made it into the bundle
+          run: |
+          APP="build/Build/Products/Release/microwhisper.app"
               echo "--- Resources:"
               ls -la "$APP/Contents/Resources/"
               echo "--- Info.plist icon keys:"
@@ -75,13 +75,13 @@ jobs:
               plutil -extract CFBundleIconName raw -o - "$APP/Contents/Info.plist" 2>/dev/null || true
               # Require at least one of: a real .icns, or a compiled Assets.car that contains AppIcon
               if [[ ! -f "$APP/Contents/Resources/AppIcon.icns" ]] && \
-                 ! (command -v assetutil >/dev/null && assetutil --info "$APP/Contents/Resources/Assets.car" 2>/dev/null | grep -q AppIcon); then
-                echo "Icon assets missing from built bundle — aborting." >&2
-                exit 1
+                  ! (command -v assetutil >/dev/null && assetutil --info "$APP/Contents/Resources/Assets.car" 2>/dev/null | grep -q AppIcon); then
+                  echo "Icon assets missing from built bundle — aborting." >&2
+                  exit 1
               fi
-
+      
       - name: Ad-hoc sign the .app
-        run: |
+          run: |
           APP="build/Build/Products/Release/microwhisper.app"
           codesign --force --deep --sign - --timestamp=none "$APP"
           codesign --verify --verbose "$APP"
