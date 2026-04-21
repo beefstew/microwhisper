@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read        # no write token reachable from the build step
+    outputs:
+      dmg: ${{ steps.v.outputs.dmg }}
     steps:
       - name: Checkout (no persisted creds)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -103,7 +105,9 @@ jobs:
       - name: Upload DMG as workflow artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: dmg
+          # With archive: false, upload-artifact v7 names the artifact after the file,
+          # ignoring any other `name` value — keep them in sync explicitly.
+          name: ${{ steps.v.outputs.dmg }}
           path: ${{ steps.v.outputs.dmg }}
           if-no-files-found: error
           archive: false       # keeps the .dmg intact, no zip wrapper
@@ -121,7 +125,7 @@ jobs:
       - name: Download DMG
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: dmg
+          name: ${{ needs.build.outputs.dmg }}
 
       - name: Create GitHub Release
         env:
