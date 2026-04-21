@@ -6,14 +6,11 @@ struct ContentView: View {
 
     var body: some View {
         return ZStack {
-            VisualEffectView(
-                material: .contentBackground,
-                blendingMode: .withinWindow
-            )
-            .edgesIgnoringSafeArea(.all)
+            VisualEffectView(material: .titlebar, blendingMode: .behindWindow)
+                .edgesIgnoringSafeArea(.all)
 
             VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .center, spacing: 20) {
                     Spacer(minLength: 10)
 
                     // Audio source selector
@@ -30,9 +27,11 @@ struct ContentView: View {
                             }
                         }
                         .pickerStyle(.menu)
-                        .frame(maxWidth: 350)
+                        .frame(minWidth: 320)
                         .disabled(viewModel.isRecording)
 
+                        Spacer(minLength: 8)
+                        
                         // Record button
                         Button(action: {
                             viewModel.toggleRecording()
@@ -64,6 +63,7 @@ struct ContentView: View {
                                 }
                             }
                         }
+                        .padding([.top, .bottom], 10)
                         .buttonStyle(PlainButtonStyle())
                         .help(
                             viewModel.isRecording
@@ -72,7 +72,9 @@ struct ContentView: View {
 
                         AudioLevelMeter(levels: viewModel.audioLevels)
                     }
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding([.leading, .trailing], 40)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 40))
 
                     // Transcript area with flexible sizing
                     VStack(alignment: .trailing, spacing: 8) {
@@ -109,12 +111,6 @@ struct ContentView: View {
                             )
                     }
                     .padding(.horizontal, 30)
-                    //                        .frame(minHeight: 200, maxHeight: .infinity)
-                    .animation(
-                        .easeInOut(duration: 0.3),
-                        value: viewModel.isRecording
-                    )
-                    .transition(.opacity)
 
                     Spacer(minLength: 20)
 
@@ -124,7 +120,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 600, minHeight: 400)
     }
 }
 
